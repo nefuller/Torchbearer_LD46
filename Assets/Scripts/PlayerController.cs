@@ -7,7 +7,7 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     public float m_MovementDistance = 1f;
-    public float m_MovementSpeed = 0.5f;
+    public float m_MovementSpeed = 0.25f;
     public GameObject m_Prefab_Wall;
     public Transform m_Transform_ExternalWalls;
     public Transform m_Transform_Door;
@@ -33,7 +33,9 @@ public class PlayerController : MonoBehaviour
     TorchController m_torchController;
     bool m_isWaitingForKeypress = false;
     GameData m_gameData;
-    float m_timeout = 1.5f;
+    float m_resetTimeout = 1.5f;
+    float m_moveTimeout;
+    const float MOVE_TIMEOUT = .15f;
     void Start()
     {
         m_horzMovement = new Vector3(m_MovementDistance, 0, 0);
@@ -45,6 +47,8 @@ public class PlayerController : MonoBehaviour
         m_gameData = FindObjectOfType<GameData>();
 
         m_Text_Score.text = string.Format(CultureInfo.InvariantCulture, "Score: {0}", m_gameData.Score);
+
+        m_moveTimeout = MOVE_TIMEOUT;
     }
 
     void OnDestroy()
@@ -67,9 +71,9 @@ public class PlayerController : MonoBehaviour
     {
         if (m_isWaitingForKeypress)
         {
-            m_timeout -= Time.deltaTime;
+            m_resetTimeout -= Time.deltaTime;
 
-            if (Input.anyKeyDown && m_timeout < 0)
+            if (Input.anyKeyDown && m_resetTimeout < 0)
             {
                 StartCoroutine(GameData.LoadScene("menu"));
             }
@@ -77,7 +81,8 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        if (m_isMoving)
+        m_moveTimeout -= Time.deltaTime;
+        if (m_isMoving || m_moveTimeout > 0f)
         {
             return;
         }
@@ -85,37 +90,45 @@ public class PlayerController : MonoBehaviour
         var horz = Input.GetAxis("Horizontal");
         var vert = Input.GetAxis("Vertical");
 
-        if (horz != 0)
-        {
-            var nextPlayerPosition = horz > 0 ? 
-                transform.position + m_horzMovement : 
-                transform.position - m_horzMovement;
+        var left = Input.GetKey(KeyCode.A);
+        var right = Input.GetKey(KeyCode.D);
+        var up = Input.GetKey(KeyCode.W);
+        var down = Input.GetKey(KeyCode.S);
 
-            StartCoroutine(TryMove(nextPlayerPosition));
+        if (left)
+        {
+            StartCoroutine(TryMove(transform.position - m_horzMovement));
         }
-        else if (vert != 0)
+        else if (right)
         {
-            var nextPlayerPosition = vert > 0 ?
-                transform.position + m_vertMovement :
-                transform.position - m_vertMovement;
-
-            StartCoroutine(TryMove(nextPlayerPosition));
+            StartCoroutine(TryMove(transform.position + m_horzMovement));
+        }
+        else if (up)
+        {
+            StartCoroutine(TryMove(transform.position + m_vertMovement));
+        }
+        else if (down)
+        {
+            StartCoroutine(TryMove(transform.position - m_vertMovement));
         }
     }
 
     IEnumerator TryMove(Vector3 nextPlayerPosition)
     {
         m_isMoving = true;
+        m_moveTimeout = MOVE_TIMEOUT;
 
         var ray = new Ray(nextPlayerPosition + RAY_OFFSET, Vector3.down);
 
         var hit = Physics.Raycast(ray, out RaycastHit hitInfo, RAY_DISTANCE);
         if (hit)
         {
+            
             Debug.Log(hitInfo.transform.gameObject.name);
             if (hitInfo.transform.gameObject.layer == Layers.LAYER_FLOOR ||
                 hitInfo.transform.gameObject.layer == Layers.LAYER_TRIGGER)
             {
+             
                 yield return StartCoroutine(Move(nextPlayerPosition));
             }
             else if (hitInfo.transform.gameObject.layer == Layers.LAYER_COLLECTABLE)
